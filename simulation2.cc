@@ -155,7 +155,6 @@ int main (int argc, char *argv[])
 
 
   Ipv4AddressHelper address1;
-
   address1.SetBase ("11.1.1.0", "255.255.255.0");
   Ipv4InterfaceContainer p2pInterfaces;
   p2pInterfaces = address1.Assign (p2pDevices);

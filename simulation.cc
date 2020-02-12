@@ -84,7 +84,10 @@ uint32_t m_testNumber = 0 ;
 uint32_t m_packetSize = PACKET_SIZE_DEFAULT ;
 
 /** Number of nodes */
-uint32_t m_nNodes = 2 ;
+uint32_t m_nNodes = 3 ;
+uint32_t m_nNodes80211p = 3  ;
+uint32_t m_nNodeswave = 0 ;
+uint32_t m_nNodes80211b = 0 ;
 
 /** Packet time interval */
 double m_packetInterval = 1 ;
@@ -118,11 +121,16 @@ Ns2MobilityHelper *m_ns2Helper ;
 // ---------------- name network
 /**
  */
-NodeContainer m_nodeContainer ;
+
+NodeContainer m_80211pContainer ;//1
+NodeContainer m_waveContainer ;//3
+NodeContainer m_80211bContainer ;//2
 
 /**
  */
-NetDeviceContainer m_netDeviceContainer;
+NetDeviceContainer m_netDeviceContainer80211p;
+NetDeviceContainer m_netDeviceContainer80211b;
+NetDeviceContainer m_netDeviceContainerwave;
   
 
 /** Number of nodes which send a message
@@ -161,6 +169,7 @@ public:
     this->emitter = emitter ;
     this->receiver = receiver ;
     this->packetSize = PACKET_SIZE_DEFAULT ;
+    this->mode = 3 ;
     this->msgSent = 0 ;
     this->msgReceived = 0 ;
   }
@@ -170,6 +179,17 @@ public:
     this->emitter = emitter ;
     this->receiver = receiver ;
     this->packetSize = packetSize ;
+    this->mode = 3 ;
+    this->msgSent = 0 ;
+    this->msgReceived = 0 ;
+  }
+
+    EmitterReceiver(int emitter, int receiver, int packetSize, int mode) {
+
+    this->emitter = emitter ;
+    this->receiver = receiver ;
+    this->packetSize = packetSize ;
+    this->mode = mode ;
     this->msgSent = 0 ;
     this->msgReceived = 0 ;
   }
@@ -190,6 +210,10 @@ public:
 
   uint32_t GetReceiver() {
     return this->receiver ;
+  }
+
+    uint32_t GetMode() {
+    return this->mode ;
   }
 
   uint32_t GetPacketSize() {
@@ -220,6 +244,8 @@ private:
   /** Messages received
    */
   uint32_t msgReceived ;
+
+  uint32_t mode ;
 } ;
 
 // Vector of links
@@ -292,29 +318,37 @@ std::map<uint64_t, PacketInformation> s_appPacketInformation ;
 static void GenerateTraffic (uint32_t nReceiver, uint32_t nEmitter, Ptr<Socket> socket, uint32_t pktSize, double pktInterval ) {
 
   const uint8_t buffer[pktSize+3] = {1,2,3} ;
+
   
   // -------------------------------------------------------
   // Packet to be sent
   Ptr<Packet> packet = Create<Packet> (buffer,pktSize);
-  
+
   PacketInformation packetInfo = PacketInformation(Simulator::Now().GetSeconds()) ;
   s_appPacketInformation.insert(std::pair<uint64_t, PacketInformation>(packet->GetUid(), packetInfo)) ;
-  
+
   std::pair<uint32_t, uint32_t> pairER = std::make_pair(nEmitter, nReceiver) ;
   std::map<std::pair<uint32_t, uint32_t>, EmitterReceiver>::iterator itRes = s_emitterReceiverResult.find(pairER) ;
-  
+
   if (itRes != s_emitterReceiverResult.end()) {
     itRes->second.MessageSent() ;
   }
-  
-  Ptr<MobilityModel> mob = m_nodeContainer.Get(nReceiver)->GetObject<MobilityModel>();
+
+  Ptr<MobilityModel> mob = m_80211pContainer.Get(nReceiver)->GetObject<MobilityModel>();
+
+
   Vector pos = mob->GetPosition ();
   //std::cout << "Node " << nReceiver << ": POS: x=" << pos.x << ", y=" << pos.y << std::endl;
 
-  Ptr<MobilityModel> mob1 = m_nodeContainer.Get(nEmitter)->GetObject<MobilityModel>();
+  Ptr<MobilityModel> mob1 = m_80211pContainer.Get(nEmitter)->GetObject<MobilityModel>();
+  
+
   Vector pos1 = mob1->GetPosition ();
   //std::cout << "Node " << nEmitter << ": POS: x=" << pos1.x << ", y=" << pos1.y << std::endl;
+  
+
   double distance = sqrt((pos.x - pos1.x)*(pos.x - pos1.x)+(pos.y - pos1.y)*(pos.y - pos1.y)+(pos.z - pos1.z)*(pos.z - pos1.z));
+
 
   // ----------------------------------------------------------------------------
   // Display information about sending => does not work for tag to be checked
@@ -328,6 +362,7 @@ static void GenerateTraffic (uint32_t nReceiver, uint32_t nEmitter, Ptr<Socket> 
                  << " txSizeNet: " << pktSize
                  );
 
+
   // -----------------------------------------------------------------------------
   // Adding tag
   MyTag tag;
@@ -335,9 +370,11 @@ static void GenerateTraffic (uint32_t nReceiver, uint32_t nEmitter, Ptr<Socket> 
   tag.SetRNode(nReceiver) ;
   packet->AddPacketTag (tag);
 
+
   // -------------------------------------------------------
   // Send the packet
   socket->Send (packet);
+
 
   // -------------------------------------------------------
   // Schedule next packet
@@ -348,6 +385,8 @@ static void GenerateTraffic (uint32_t nReceiver, uint32_t nEmitter, Ptr<Socket> 
     double offset = 0 ;
     Simulator::Schedule (Seconds(pktInterval + offset), &GenerateTraffic, nReceiver, nEmitter, socket, pktSize, pktInterval);
   }
+
+
 }
 
 
@@ -361,7 +400,7 @@ void ReceivePacket (Ptr<Socket> socket) {
 
   Ptr<Packet> packet;
 
-  NS_LOG_DEBUG ("-AtApp " << Simulator::Now().GetSeconds() <<" receive 1 Packet ") ;
+  NS_LOG_DEBUG ("--AtApp " << Simulator::Now().GetSeconds() <<" receive 1 Packet ") ;
   
   while ((packet = socket->Recv ())) {
 
@@ -391,10 +430,12 @@ void ReceivePacket (Ptr<Socket> socket) {
  * \see ns3::Ns2MobilityHelper Class
  */
 bool CreateNS2Nodes() {
-
   m_ns2Helper = new Ns2MobilityHelper(m_scenarioFileName) ;
-  m_nodeContainer.Create (m_nNodes) ;
-  m_ns2Helper->Install() ; //m_nodeContainer.Begin(), m_nodeContainer().End) ;
+  m_80211pContainer.Create (m_nNodes80211p) ;
+  m_80211bContainer.Create (m_nNodes80211b) ;
+  m_waveContainer.Create (m_nNodeswave) ;
+  
+  m_ns2Helper->Install(); //m_80211pContainer.Begin(), m_80211pContainer().End) ;
 
   return true ;
 }
@@ -524,16 +565,11 @@ void InstallYansWifi() {
    QosWaveMacHelper waveMac = QosWaveMacHelper::Default ();
  
    // Setup net devices
- 
-   if (m_80211mode == 3) {
-       m_netDeviceContainer = waveHelper.Install (wavePhy, waveMac, m_nodeContainer) ;
-   }
-   else if (m_80211mode == 1) {
-       m_netDeviceContainer = wifi80211p.Install (wifiPhy, wifi80211pMac, m_nodeContainer) ;
-     }
-   else {
-       m_netDeviceContainer = wifi.Install (wifiPhy, wifiMac, m_nodeContainer) ;
-     }
+
+  
+       m_netDeviceContainerwave= waveHelper.Install (wavePhy, waveMac, m_waveContainer) ;
+       m_netDeviceContainer80211p = wifi80211p.Install (wifiPhy, wifi80211pMac, m_80211pContainer) ;
+       m_netDeviceContainer80211b = wifi.Install (wifiPhy, wifiMac, m_80211bContainer) ;
  
    if (m_asciiTrace != 0) {
        std::ostringstream logFileName ;
@@ -560,11 +596,11 @@ void InstallYansWifi() {
 void InstallNoProtocol () {
 
   InternetStackHelper stack;
-  stack.Install (m_nodeContainer);
+  stack.Install (m_80211pContainer);
   
   Ipv4AddressHelper address;
   address.SetBase ("10.0.0.0", "255.0.0.0");
-  m_ipv4InterfaceContainer = address.Assign (m_netDeviceContainer);
+  m_ipv4InterfaceContainer = address.Assign (m_netDeviceContainer80211p);
   
 }
 
@@ -575,13 +611,17 @@ void InstallNoProtocol () {
  */
 void InstallNoProtocolIpv6 () {
   InternetStackHelper stack;
-  stack.Install (m_nodeContainer);
+  stack.Install (m_80211pContainer);
+  stack.Install (m_80211bContainer);
+  stack.Install (m_waveContainer);
 
   Ipv6AddressHelper ip1;
   Ipv6Address ipAddr1;
   ipAddr1 = ip1.NewAddress ();
   ip1.SetBase (Ipv6Address ("2001:db81::"), Ipv6Prefix (32), Ipv6Address ("::1"));
-  m_ipv6InterfaceContainer = ip1.Assign (m_netDeviceContainer);
+  m_ipv6InterfaceContainer = ip1.Assign (m_netDeviceContainer80211p);
+  m_ipv6InterfaceContainer = ip1.Assign (m_netDeviceContainer80211b);
+  m_ipv6InterfaceContainer = ip1.Assign (m_netDeviceContainerwave);
 }
 
 
@@ -593,9 +633,9 @@ void InstallNoProtocolIpv6 () {
  */
 Ipv4InterfaceAddress GetIpv4Address(uint32_t index) {
 
-  for (uint32_t indexDevice = 0 ; indexDevice < m_netDeviceContainer.GetN() ; indexDevice ++) {
+  for (uint32_t indexDevice = 0 ; indexDevice < m_netDeviceContainer80211p.GetN() ; indexDevice ++) {
 
-    Ptr<NetDevice> netDevice=m_netDeviceContainer.Get(indexDevice);
+    Ptr<NetDevice> netDevice=m_netDeviceContainer80211p.Get(indexDevice);
     Ptr<Node> node=netDevice->GetNode ();
     if (node != NULL) {
       Ptr<Ipv4> ipv4=node->GetObject<Ipv4> ();
@@ -627,9 +667,9 @@ Ipv4InterfaceAddress GetIpv4Address(uint32_t index) {
  */
 Ipv6InterfaceAddress GetIpv6Address(uint32_t index) {
 
-  for (uint32_t indexDevice = 0 ; indexDevice < m_netDeviceContainer.GetN() ; indexDevice ++) {
+  for (uint32_t indexDevice = 0 ; indexDevice < m_netDeviceContainer80211p.GetN() ; indexDevice ++) {
 
-    Ptr<NetDevice> netDevice=m_netDeviceContainer.Get(indexDevice);
+    Ptr<NetDevice> netDevice=m_netDeviceContainer80211p.Get(indexDevice);
     Ptr<Node> node=netDevice->GetNode ();
     if (node != NULL) {
       Ptr<Ipv6> ipv6=node->GetObject<Ipv6> ();
@@ -653,6 +693,90 @@ Ipv6InterfaceAddress GetIpv6Address(uint32_t index) {
 
   return Ipv6InterfaceAddress() ;
 }
+Ipv6InterfaceAddress GetIpv6Address(uint32_t index, uint32_t mode) {
+  if (mode==1)
+  {
+
+  for (uint32_t indexDevice = 0 ; indexDevice < m_netDeviceContainer80211p.GetN() ; indexDevice ++) {
+
+    Ptr<NetDevice> netDevice=m_netDeviceContainer80211p.Get(indexDevice);
+    Ptr<Node> node=netDevice->GetNode ();
+    if (node != NULL) {
+      Ptr<Ipv6> ipv6=node->GetObject<Ipv6> ();
+
+      int32_t interface = ipv6->GetInterfaceForDevice (netDevice);
+      uint32_t nb = ipv6->GetNAddresses(interface);
+
+      for(uint32_t indexInterface = 0 ;  indexInterface < nb ; indexInterface ++) {
+        Ipv6InterfaceAddress addr = ipv6->GetAddress(interface, indexInterface);
+
+        if (index == node->GetId() ) {
+          //std::cerr << "FD::Found the correct node " << node->GetId() << " has address " << addr.GetLocal() << " Mask " << addr.GetMask() << " Broadcast "<< addr.GetBroadcast() << std::endl;
+          return addr ;
+        }
+      }
+    }
+    else {
+      std::cerr << "FD:Node is null" << std::endl ;
+    }
+  }
+}
+  if (mode==2)
+  {
+
+  for (uint32_t indexDevice = 0 ; indexDevice < m_netDeviceContainer80211b.GetN() ; indexDevice ++) {
+
+    Ptr<NetDevice> netDevice=m_netDeviceContainer80211b.Get(indexDevice);
+    Ptr<Node> node=netDevice->GetNode ();
+    if (node != NULL) {
+      Ptr<Ipv6> ipv6=node->GetObject<Ipv6> ();
+
+      int32_t interface = ipv6->GetInterfaceForDevice (netDevice);
+      uint32_t nb = ipv6->GetNAddresses(interface);
+
+      for(uint32_t indexInterface = 0 ;  indexInterface < nb ; indexInterface ++) {
+        Ipv6InterfaceAddress addr = ipv6->GetAddress(interface, indexInterface);
+
+        if (index == node->GetId() ) {
+          //std::cerr << "FD::Found the correct node " << node->GetId() << " has address " << addr.GetLocal() << " Mask " << addr.GetMask() << " Broadcast "<< addr.GetBroadcast() << std::endl;
+          return addr ;
+        }
+      }
+    }
+    else {
+      std::cerr << "FD:Node is null" << std::endl ;
+    }
+  }
+} 
+ if (mode==3)
+  {
+
+  for (uint32_t indexDevice = 0 ; indexDevice < m_netDeviceContainerwave.GetN() ; indexDevice ++) {
+
+    Ptr<NetDevice> netDevice=m_netDeviceContainerwave.Get(indexDevice);
+    Ptr<Node> node=netDevice->GetNode ();
+    if (node != NULL) {
+      Ptr<Ipv6> ipv6=node->GetObject<Ipv6> ();
+
+      int32_t interface = ipv6->GetInterfaceForDevice (netDevice);
+      uint32_t nb = ipv6->GetNAddresses(interface);
+
+      for(uint32_t indexInterface = 0 ;  indexInterface < nb ; indexInterface ++) {
+        Ipv6InterfaceAddress addr = ipv6->GetAddress(interface, indexInterface);
+
+        if (index == node->GetId() ) {
+          //std::cerr << "FD::Found the correct node " << node->GetId() << " has address " << addr.GetLocal() << " Mask " << addr.GetMask() << " Broadcast "<< addr.GetBroadcast() << std::endl;
+          return addr ;
+        }
+      }
+    }
+    else {
+      std::cerr << "FD:Node is null" << std::endl ;
+    }
+  }
+}
+  return Ipv6InterfaceAddress() ;
+}
 
 /**
  * Install socket for node communication
@@ -670,32 +794,59 @@ void InstallSocketApplications() {
   // UdpClient -> UdpServer
   int i = 1 ;
   for (std::vector<EmitterReceiver>::iterator it = m_vlinks.begin() ; it != m_vlinks.end() ; it ++, i++) {
-    NS_LOG_UNCOND("Link " << i << ": node " << it->GetEmitter() << " send information to " << it->GetReceiver()) ;
-
+   
     uint32_t nNodeServer = it->GetReceiver() ;
     uint32_t nNodeClient = it->GetEmitter() ;
     uint32_t packetSize = it->GetPacketSize() ;
-    
+    uint32_t mode = it->GetMode() ;
+    NS_LOG_UNCOND("Link " << i << ": node " << it->GetEmitter() << " send information to " << it->GetReceiver()<< " with " << it->GetMode() ) ;
     // Configure the server
-    Ipv6InterfaceAddress destAddress = GetIpv6Address(nNodeServer) ;
-    Ptr<Socket> recvSink = Socket::CreateSocket (m_nodeContainer.Get (nNodeServer), tid);
-    Inet6SocketAddress local = Inet6SocketAddress (Ipv6Address::GetAny(), port);
-    recvSink->Bind (local);
-    recvSink->SetRecvCallback (MakeCallback (&ReceivePacket));
+    Ipv6InterfaceAddress destAddress = GetIpv6Address(nNodeServer, mode) ;
+    Ptr<Socket> recvSink;
+    Ptr<Socket> source ;
+    
 
-    // Configure the client
-    Ptr<Socket> source = Socket::CreateSocket ( m_nodeContainer.Get(nNodeClient), tid);
+    if (mode==3)
+    {
+
+      recvSink = Socket::CreateSocket (m_waveContainer.Get (nNodeServer), tid);
+
+      // Configure the client
+       source = Socket::CreateSocket ( m_waveContainer.Get(nNodeClient), tid);
+    }
+    if (mode==2)
+      {
+
+        recvSink = Socket::CreateSocket (m_80211bContainer.Get (nNodeServer), tid);
+        source = Socket::CreateSocket ( m_80211bContainer.Get(nNodeClient), tid);
+      }
+    if (mode==1)
+    {
+      
+
+        recvSink = Socket::CreateSocket (m_80211pContainer.Get (nNodeServer), tid);
+        source = Socket::CreateSocket ( m_80211pContainer.Get(nNodeClient), tid);
+
+    }
+    
+
+    //Ptr<Socket> recvSink = Socket::CreateSocket (m_80211pContainer.Get (nNodeServer), tid);
+      Inet6SocketAddress local = Inet6SocketAddress (Ipv6Address::GetAny(), port);
+      recvSink->Bind (local);
+      recvSink->SetRecvCallback (MakeCallback (&ReceivePacket));  
+
+
 
     Inet6SocketAddress remote = Inet6SocketAddress (destAddress.GetAddress(), port);
     source->SetAllowBroadcast (true);
     source->Bind();
     source->Connect (remote);  // Used to set the destination address of the outgoing packets
+    
 
     // Display
     m_nNodesEmitter = m_vlinks.size() ;
     double offset = 0.001*(i-1) ; //* nNodeClient ;
-    
-    Ipv6InterfaceAddress srcAddress = GetIpv6Address(nNodeClient) ;
+    Ipv6InterfaceAddress srcAddress = GetIpv6Address(nNodeClient, mode) ;
     NS_LOG_UNCOND("\tClient " << srcAddress.GetAddress() << " (" << nNodeClient << ") sends information to " << destAddress.GetAddress() << " (" << nNodeServer << ")" << " (start time = " << Seconds(m_startSendTime + offset).GetSeconds() << " s)") ;
 
     Simulator::Schedule (Seconds(m_startSendTime + offset), &GenerateTraffic, nNodeServer, nNodeClient, source, packetSize, m_packetInterval);
@@ -714,13 +865,13 @@ void InstallApplications () {
     NS_FATAL_ERROR("Cannot read traffic file " << m_trafficFileName << " please check the file name") ;
   }
   else {
-    int iNodeEmit, iNodeRec, packetSize ;
+    int iNodeEmit, iNodeRec, packetSize, mode ;
     std::string line ;
     while (std::getline(trafficFile,line)) {
       iNodeEmit = -1 ; iNodeRec = -1 ; packetSize = -1 ;
       if (line.find("#") == std::string::npos && !line.empty()) {
         std::istringstream iss(line);
-        iss >> iNodeEmit >> iNodeRec >> packetSize ;
+        iss >> iNodeEmit >> iNodeRec >> packetSize >>mode;
 
         if ((iNodeEmit < 0) || (iNodeRec < 0)) {
           trafficFile.close() ;
@@ -733,7 +884,7 @@ void InstallApplications () {
           }
           else {
             if (packetSize <= 0) packetSize = m_packetSize ;
-            m_vlinks.push_back(EmitterReceiver(iNodeEmit, iNodeRec, packetSize)) ;
+            m_vlinks.push_back(EmitterReceiver(iNodeEmit, iNodeRec, packetSize, mode)) ;
           }
         }
       }
@@ -785,18 +936,22 @@ int main (int argc, char *argv[]) {
         //else
         //NS_FATAL_ERROR ("Unable to create dir " << m_outputdir << " error " << error << " / " << EEXIST) ;
     }
-  
+
   CreateNS2Nodes();
   InstallYansWifi();
   InstallNoProtocolIpv6() ;
   InstallApplications() ;
+
   
   // -------------------------------------------------------------------------------------           
+  
+  /*
   std::ostringstream logFileNameAnim ;
   logFileNameAnim << m_outputdir.c_str() << "animation" << ".xml" ;
   //std::cout << "Opening file " << logFileNameAnim.str() << std::endl ;                             
   AnimationInterface anim (logFileNameAnim.str().c_str()); // Mandatory    
-  
+  */
+
   Simulator::Run ();
   Simulator::Destroy ();
 

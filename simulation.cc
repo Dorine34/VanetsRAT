@@ -29,7 +29,7 @@
 #include "ns3/wifi-module.h"
 #include "ns3/wifi-80211p-helper.h"
 #include "ns3/wave-mac-helper.h"
- //#include "ns3/gtk-config-store.h"
+#include "ns3/ipv6-address-helper.h"
  
 using namespace ns3;
  
@@ -40,7 +40,7 @@ main (int argc, char *argv[])
 {
   uint16_t numNodePairs = 1;
   Time simTime = MilliSeconds (1100);
-  double distance = 60.0;
+ // double distance = 60.0;
   Time interPacketInterval = MilliSeconds (100);
   bool useCa = false;
   bool disableDl = false;
@@ -51,7 +51,7 @@ main (int argc, char *argv[])
   CommandLine cmd;
   cmd.AddValue ("numNodePairs", "Number of eNodeBs + UE pairs", numNodePairs);
   cmd.AddValue ("simTime", "Total duration of the simulation", simTime);
-  cmd.AddValue ("distance", "Distance between eNBs [m]", distance);
+  //cmd.AddValue ("distance", "Distance between eNBs [m]", distance);
   cmd.AddValue ("interPacketInterval", "Inter packet interval", interPacketInterval);
   cmd.AddValue ("useCa", "Whether to use carrier aggregation.", useCa);
   cmd.AddValue ("disableDl", "Disable downlink data flows", disableDl);
@@ -79,6 +79,7 @@ main (int argc, char *argv[])
   /*                                                */
   /*         LTE          EPC                       */
   /*    UE----------eNb-----------pgw               */
+  /*        UTRAN    S1     EPC                     */
   /*                                                */
   /**************************************************/
  
@@ -121,11 +122,16 @@ main (int argc, char *argv[])
   p2ph.SetChannelAttribute ("Delay", TimeValue (MilliSeconds (10)));
   NetDeviceContainer internetDevices = p2ph.Install (pgw, remoteHost);
 
+  
   Ipv4AddressHelper ipv4h;
   ipv4h.SetBase ("1.0.0.0", "255.0.0.0");
   Ipv4InterfaceContainer internetIpIfaces = ipv4h.Assign (internetDevices);
+  
+
 
   // interface 0 is localhost, 1 is the p2p device
+
+  
   Ipv4Address remoteHostAddr = internetIpIfaces.GetAddress (1);
   Ipv4StaticRoutingHelper ipv4RoutingHelper;
   Ptr<Ipv4StaticRouting> remoteHostStaticRouting = ipv4RoutingHelper.GetStaticRouting (remoteHost->GetObject<Ipv4> ());
@@ -133,17 +139,15 @@ main (int argc, char *argv[])
   
 
 
+
   /**************************************************/
   /*                                                */
   /*   Wifi :802.11p installation                   */
-  /*                                                */
   /*                                                */
   /*        80211p       80211p                     */
   /*   ue-------------ss-----------remoteHost       */
   /*                                                */
   /**************************************************/
-
-
 
   double freq = 5.9e9;
 
@@ -157,10 +161,10 @@ main (int argc, char *argv[])
   phy.SetChannel (channel.Create ());
   phy.SetPcapDataLinkType (WifiPhyHelper::DLT_IEEE802_11);
 
-/*******************Install devices *******************/
-std::string m_phyMode = "OfdmRate6MbpsBW10MHz" ;
-Wifi80211pHelper wifi80211p = Wifi80211pHelper::Default ();
-wifi80211p.SetRemoteStationManager ("ns3::ConstantRateWifiManager",
+  /*******************Install devices *******************/
+  std::string m_phyMode = "OfdmRate6MbpsBW10MHz" ;
+  Wifi80211pHelper wifi80211p = Wifi80211pHelper::Default ();
+  wifi80211p.SetRemoteStationManager ("ns3::ConstantRateWifiManager",
                                        "DataMode",StringValue (m_phyMode),
                                        "ControlMode",StringValue (m_phyMode));
   /*******************************************/
@@ -172,10 +176,6 @@ wifi80211p.SetRemoteStationManager ("ns3::ConstantRateWifiManager",
   apDevices = wifi80211p.Install (phy, mac, ssNodes);
   apDevices = wifi80211p.Install (phy, mac, remoteHost);
   apDevices = wifi80211p.Install (phy, mac, ueNodes);
-
-
-
-
 
   /**************************************************/
   /*                                                */
@@ -217,13 +217,20 @@ wifi80211p.SetRemoteStationManager ("ns3::ConstantRateWifiManager",
   lteHelper->Attach (ueLteDevs.Get(0), enbLteDevs.Get(0));
 
 
-  /****************************************************************************/
-  /*                                                                          */
-  /*                             Application client serveur                   */
-  /*                                       with different ports                         */
-  /*                                                                          */
-  /*                                                                          */   
-  /****************************************************************************/
+  /******************************************************************/
+  /*                                                                */
+  /*                   Application client serveur                   */
+  /*                                                                */
+  /*       Downlink : client (ue)-----------> serveur (remotehost)  */
+  /*                  port 1100,  Max Paquets 1000 000              */
+  /*                              Intervalles 0.1s                  */
+  /*                                                                */
+  /*                                                                */ 
+  /*       Uplink :   client (remoteHost)---> serveur (ue)          */
+  /*                  port 2000, Max Paquets 1000 000               */
+  /*                              Intervalles 0.1s                  */                                                          
+  /*                                                                */
+  /******************************************************************/
 
 
   // Install and start applications on UEs and remote host
@@ -259,10 +266,7 @@ wifi80211p.SetRemoteStationManager ("ns3::ConstantRateWifiManager",
   /*                                                                          */
   /*                             Application                                  */
   /*                                                                          */
-  /*                                                                          */   
   /****************************************************************************/
-
-
 
    serverApps.Start (MilliSeconds (500));
    clientApps.Start (MilliSeconds (500));
@@ -270,9 +274,6 @@ wifi80211p.SetRemoteStationManager ("ns3::ConstantRateWifiManager",
  
    Simulator::Stop (simTime);
    Simulator::Run ();
- 
-
-
    Simulator::Destroy ();
    return 0;
  }
